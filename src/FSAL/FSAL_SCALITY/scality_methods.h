@@ -37,14 +37,16 @@
 
 
 #define V4_FH_OPAQUE_SIZE (NFS4_FHSIZE - sizeof(struct file_handle_v4))
+#define SCALITY_OPAQUE_SIZE (sizeof(uint64_t))
+
 #define MAX_URL_SIZE 4096
 #define S3_DELIMITER "/"
 #define S3_DELIMITER_SZ (sizeof(S3_DELIMITER)-1)
-#define READDIR_MAX_KEYS 50
+#define READDIR_MAX_KEYS 500
 #define DEFAULT_PART_SIZE (5*(1<<20))
 #define FLUSH_THRESHOLD (15*(1<<20))
 
-enum static_assert_s3_delimiter_size { a = 1 / ( S3_DELIMITER_SZ == 1 ) };
+enum static_assert_s3_delimiter_size { static_assert_s3_delimiter_size_check = 1 / ( S3_DELIMITER_SZ == 1 ) };
 
 
 struct scality_fsal_module {
@@ -69,8 +71,10 @@ struct scality_fsal_export {
 	struct scality_fsal_module *module;
 	char *export_path;
 	char *bucket;
+	struct timespec creation_date;
 	char *owner_display_name;
 	char *owner_id;
+	mode_t umask;
 
 	struct scality_fsal_obj_handle *root_handle;
 };
@@ -105,12 +109,6 @@ struct scality_part
 	struct scality_part *next;
 };
 
-struct scality_not_backed_dir
-{
-	char *name;
-	struct scality_not_backed_dir *next;
-};
-
 enum scality_fsal_obj_state {
 	SCALITY_FSAL_OBJ_STATE_CLEAN,
 	SCALITY_FSAL_OBJ_STATE_DIRTY,
@@ -127,11 +125,7 @@ struct scality_fsal_obj_handle {
 
 	struct scality_location *locations;
 	size_t n_locations;
-	
 	fsal_openflags_t openflags;
-
-	bool not_backed;
-	struct scality_not_backed_dir *not_backed_children;
 
 	enum scality_fsal_obj_state state;
 	size_t part_size;

@@ -32,9 +32,13 @@
 #include "scality_methods.h"
 #include "dbd_rest_client.h"
 #include "sproxyd_client.h"
+#include "redis_client.h"
 #include "random.h"
 
 #define DEFAULT_CONTENT_TYPE "application/octet-stream"
+#define DIRECTORY_CONTENT_TYPE "application/x-directory"
+#define BUCKET_BASE_PATH "/default/bucket"
+#define ATTRIBUTES_BASE_PATH "/default/attributes"
 
 struct dbd_response {
 	long http_status;
@@ -51,7 +55,47 @@ struct dbd_get_parameters {
 typedef struct dbd_response dbd_response_t;
 typedef struct dbd_get_parameters dbd_get_parameters_t;
 
- void
+
+static struct timespec
+iso8601_str2timespec(const char* ts_str)
+{
+	struct timespec result = {};
+	int y,M,d,h,m;
+	double s;
+	if (NULL != ts_str) {
+		int ret = sscanf(ts_str, "%d-%d-%dT%d:%d:%lfZ", &y, &M, &d, &h, &m, &s);
+		if ( 6 != ret ) {
+			LogCrit(COMPONENT_FSAL,
+				"malformed ISO8601  date %s. got %d fields",
+				ts_str, ret);
+		} else {
+			LogDebug(COMPONENT_FSAL,
+				 "ISO8601 date: %d-%d-%d %d:%d:%f",
+				 y, M, d, h, m, s);
+			struct tm tm = {
+				.tm_year = y-1900,
+				.tm_mon = M-1,
+				.tm_mday = d,
+				.tm_hour = h,
+				.tm_min = m,
+				.tm_sec = (int)s,
+				.tm_isdst = -1,
+			};
+			time_t t = timegm(&tm);
+			result = (struct timespec) {
+				.tv_sec = t,
+				.tv_nsec = (s-(int)s)*1000000000,
+			};
+		}
+	}
+	else {
+		LogCrit(COMPONENT_FSAL,
+			"null ISO8601  timestamp");
+	}
+	return result;
+}
+
+void
 dbd_response_free(dbd_response_t *response)
 {
 	if ( response ) {
@@ -63,6 +107,7 @@ dbd_response_free(dbd_response_t *response)
 
 static dbd_response_t *
 dbd_get(struct scality_fsal_export *export,
+        const char *base_path,
 	const char *object,
 	dbd_get_parameters_t *parameters) {
 
@@ -137,13 +182,13 @@ dbd_get(struct scality_fsal_export *export,
 
 	if (object) {
 		char *tmp = curl_easy_escape(curl, object, strlen(object));
-		pos = snprintf(url, sizeof(url), "%s/%s/%s",
-			       export->module->dbd_url, export->bucket, tmp);
+		pos = snprintf(url, sizeof(url), "%s%s/%s/%s",
+			       export->module->dbd_url, base_path, export->bucket, tmp);
 		free(tmp);
 	}
 	else {
-		pos = snprintf(url, sizeof(url), "%s/%s%s",
-			       export->module->dbd_url, export->bucket, query_string);
+		pos = snprintf(url, sizeof(url), "%s%s/%s%s",
+			       export->module->dbd_url, base_path, export->bucket, query_string);
 	}
 
 	
@@ -223,6 +268,60 @@ dbd_get(struct scality_fsal_export *export,
 	return response;
 }
 
+dbd_is_last_result_t
+dbd_is_last(struct scality_fsal_export *export,
+            struct scality_fsal_obj_handle *dir_hdl)
+{
+        dbd_is_last_result_t result = DBD_LOOKUP_ERROR;
+        char prefix[MAX_URL_SIZE];
+        snprintf(prefix, sizeof prefix,"%s"S3_DELIMITER,dir_hdl->object);
+        dbd_get_parameters_t parameters = {
+                .prefix = prefix,
+                .marker = NULL,
+                .delimiter = S3_DELIMITER,
+                // 2 because there is a bug in md. it returs truncated = true even if there is only one entry
+                .maxkeys = 2,
+        };
+        dbd_response_t *response = dbd_get(export, BUCKET_BASE_PATH, NULL, &parameters);
+        if ( NULL == response || response->http_status != 200 ) {
+                result = DBD_LOOKUP_ERROR;
+                goto end;
+        }
+        json_t *commonPrefixes = json_object_get(response->body, "CommonPrefixes");
+	json_t *contents = json_object_get(response->body, "Contents");
+        //bool isTruncated = json_equal(json_true(), json_object_get(response->body, "IsTruncated"));
+	size_t contents_sz = json_array_size(contents);
+	size_t commonPrefixes_sz = json_array_size(commonPrefixes);
+        size_t element_count = contents_sz + commonPrefixes_sz;
+        
+        if (element_count > 1) {
+                result = DBD_LOOKUP_IS_NOT_LAST;
+                goto end;
+        }
+        if (0 == contents_sz) {
+                result = DBD_LOOKUP_ENOENT;
+                goto end;
+        }
+        assert(1 == contents_sz);
+        json_t *content = json_array_get(contents, 0);
+        json_t *key = content?json_object_get(content, "key"):NULL;
+        const char *dent = key?json_string_value(key):NULL;
+        if ( NULL == dent ) {
+                result = DBD_LOOKUP_ERROR;
+                goto end;
+        }
+        if ( 0 == strcmp(dent, prefix) ) {
+                result = DBD_LOOKUP_IS_LAST;
+        }
+        else {
+                result = DBD_LOOKUP_IS_NOT_LAST;
+        }
+        
+ end:
+        dbd_response_free(response);
+        return result;
+}
+
 int dbd_lookup(struct scality_fsal_export *export,
 	       struct scality_fsal_obj_handle *parent_hdl,
 	       const char *name,
@@ -251,11 +350,11 @@ dbd_lookup_object(struct scality_fsal_export *export,
 	dbd_dtype_t dtype = DBD_DTYPE_IOERR;
 	len = snprintf(prefix, sizeof(prefix), "%s", object);
 
-	dbd_response_t *response1 = NULL;
-	dbd_response_t *response2 = NULL;
+	dbd_response_t *exact_match_response = NULL;
+	dbd_response_t *prefix_response = NULL;
 
-	response1 = dbd_get(export, prefix, NULL);
-	if ( NULL == response1 )
+	exact_match_response = dbd_get(export, BUCKET_BASE_PATH, prefix, NULL);
+	if ( NULL == exact_match_response )
 		goto end;
 
 	// add a trailing slash to lookup a common prefix
@@ -267,39 +366,38 @@ dbd_lookup_object(struct scality_fsal_export *export,
 		.maxkeys = 1
 	};
 
-	response2 = dbd_get(export, NULL, &parameters);
-	if ( NULL == response2 || response2->http_status != 200 )
+	prefix_response = dbd_get(export, BUCKET_BASE_PATH, NULL, &parameters);
+	if ( NULL == prefix_response || prefix_response->http_status != 200 )
 		goto end;
 
-	json_t *commonPrefixes = json_object_get(response2->body, "CommonPrefixes");
-	json_t *contents = json_object_get(response2->body, "Contents");
+	json_t *commonPrefixes = json_object_get(prefix_response->body, "CommonPrefixes");
+	json_t *contents = json_object_get(prefix_response->body, "Contents");
 	
 	size_t commonPrefixes_sz = json_array_size(commonPrefixes);
 	size_t contents_sz = json_array_size(contents);
-	bool response2_empty = ( 0 == commonPrefixes_sz + contents_sz );
+	bool prefix_response_empty = ( 0 == commonPrefixes_sz + contents_sz );
 
-	if ( response2_empty ) {
-		if ( 404 == response1->http_status ) {
+	if ( prefix_response_empty ) {
+		if ( 404 == exact_match_response->http_status ) {
 			dtype = DBD_DTYPE_ENOENT;
 		}
-		else if ( 200 == response1->http_status ) {
+		else if ( 200 == exact_match_response->http_status ) {
 			dtype = DBD_DTYPE_REGULAR;
 		}
 	}
 	else {
-		if ( 404 == response1->http_status ) {
-			dtype = DBD_DTYPE_DIRECTORY;
-		}
-		else if ( 200 == response1->http_status ) {
-			LogWarn(COMPONENT_FSAL, "an object is in the way of %s",
+                dtype = DBD_DTYPE_DIRECTORY;
+		if ( 200 == exact_match_response->http_status ) {
+			LogWarn(COMPONENT_FSAL,
+                                "an object is in the way of %s, it will not be visible",
 				object);
 			dtype = DBD_DTYPE_DIRECTORY;
 		}
 	}
 	ret = 0;
  end:
-	dbd_response_free(response1);
-	dbd_response_free(response2);
+	dbd_response_free(exact_match_response);
+	dbd_response_free(prefix_response);
 	if (dtypep)
 		*dtypep = dtype;
 	return ret;
@@ -328,7 +426,7 @@ dbd_delete(struct scality_fsal_export *export,
 	}
 
 	char *tmp = curl_easy_escape(curl, object, strlen(object));
-	pos = snprintf(url, sizeof(url), "%s/%s/%s",
+	pos = snprintf(url, sizeof(url), "%s"BUCKET_BASE_PATH"/%s/%s",
 		       export->module->dbd_url, export->bucket, tmp);
 	free(tmp);
 
@@ -430,7 +528,7 @@ dbd_dirents(struct scality_fsal_export* export,
 		.delimiter = S3_DELIMITER,
 	};
 
-	response = dbd_get(export, NULL, &parameters);
+	response = dbd_get(export, BUCKET_BASE_PATH, NULL, &parameters);
 	if ( NULL == response )
 		return -1;
 	
@@ -445,6 +543,11 @@ dbd_dirents(struct scality_fsal_export* export,
 		int i;
 		for ( i = 0 ; i < json_array_size(commonPrefixes) ; ++i ) {
 			const char *dent = json_string_value(json_array_get(commonPrefixes,i));
+			if ( marker && strcmp(marker, dent) >= 0) {
+				LogWarn(COMPONENT_FSAL,
+					"got an unordered listing marker:%s >= dent:%s",
+					marker, dent);
+			}
 			size_t dent_len = 0;
 			if (NULL != dent)
 				dent_len = strlen(dent);
@@ -467,6 +570,15 @@ dbd_dirents(struct scality_fsal_export* export,
 		for ( i = 0 ; i < json_array_size(contents); ++i ) {
 			json_t *content = json_array_get(contents,i);
 			const char *dent = json_string_value(json_object_get(content,"key"));
+			if ( marker && strcmp(marker, dent) >= 0) {
+				LogWarn(COMPONENT_FSAL,
+					"got an unordered listing marker:%s >= dent:%s",
+					marker, dent);
+			}
+                        if ( 0 == strcmp(dent, prefix) ) {
+                                //skip placeholder
+                                continue;
+                        }
 			size_t dent_len = 0;
 			if (NULL != dent)
 				dent_len = strlen(dent);
@@ -484,68 +596,137 @@ dbd_dirents(struct scality_fsal_export* export,
 				 dirent);
 		}
 	}
-	
+
 	if ( ! *is_lastp ) {
 		const char *nextMarker = json_string_value(json_object_get(response->body, "NextMarker"));
 		if ( NULL != nextMarker && marker  )
 			strcpy(marker, nextMarker);
 	}
-	
+
 	*direntsp = dirents;
 	dbd_response_free(response);
 	return 0;
 }
 
 	
-void
+int
 dbd_readdir(struct scality_fsal_export* export,
 	    struct scality_fsal_obj_handle *myself,
-	    fsal_cookie_t seekloc,
+	    fsal_cookie_t *whence,
 	    void *dir_state,
 	    fsal_readdir_cb cb,
-	    int *countp,
 	    bool *eof)
 {
+	int ret = 0;
 	char marker[MAX_URL_SIZE] = "";
 	int is_last;
 	dirent_t *dirents = NULL;
+	fsal_cookie_t seekloc;
+
+	if (whence != NULL)
+		seekloc = *whence;
+	else
+		seekloc = 0;
+
+	if (seekloc) {
+		int ret = redis_get_seekloc_marker(myself->object,
+						   seekloc,
+						   marker,
+						   sizeof(marker));
+		if  ( 0 != ret )
+			return -1;
+	}
 
 	LogDebug(COMPONENT_FSAL,
 		"readdir(%s) begin",
 		myself->object);
+	int count = 0;
 	do {
 		int ret = dbd_dirents(export, myself, marker, &dirents, &is_last);
-		if ( ret < 0 )
+		if ( ret < 0 ) {
+			ret = -1;
 			break;
+		}
 
 		dirent_t *p, *d = dirents;
 		while (d) {
 			p = d;
 			d = d->next;
-			
-			++(*countp);
-			if ( *countp < seekloc)
-				continue;
-		
 			LogDebug(COMPONENT_FSAL,
 				"readdir dent: %s",
 				p->name);
-			if (!cb(p->name, dir_state, *countp)) {
-				*eof = false;
+			if (!cb(p->name, dir_state, count++)) {
+				snprintf(marker, sizeof marker, p->dtype == DBD_DTYPE_DIRECTORY
+					 ? "%s"S3_DELIMITER"%s/"
+					 : "%s"S3_DELIMITER"%s/",
+					 myself->object, p->name);
+				ret = redis_set_seekloc_marker(myself->object, marker, whence);
+				if ( 0 != ret ) {
+					ret = -1;
+				}
+				else {
+					*eof = false;
+				}
 				goto exit_loop;
 			}
-
 		}
 		dirent_free(dirents);
 		dirents = NULL;
 	} while ( !is_last );
+	*eof = true;
 	LogDebug(COMPONENT_FSAL,
 		"readdir(%s) end",
 		myself->object);
  exit_loop:
 	dirent_free(dirents);
-	return;
+	return ret;
 }
+
+int
+dbd_collect_bucket_attributes(struct scality_fsal_export *export)
+{
+        int ret = 0;
+        dbd_response_t *response;
+        response = dbd_get(export, ATTRIBUTES_BASE_PATH, "", NULL);
+        if ( NULL != response && 200 == response->http_status ) {
+		json_t *js_owner = json_object_get(response->body, "owner");
+		json_t *js_owner_display_name = json_object_get(response->body, "ownerDisplayName");
+		json_t *js_creation_date = json_object_get(response->body, "creationDate");
+                const char *owner = NULL,
+                        *owner_display_name = NULL;
+		if (js_creation_date)
+			export->creation_date =
+				iso8601_str2timespec(json_string_value(js_creation_date));
+                if (js_owner)
+                        owner = json_string_value(js_owner);
+                if (js_owner_display_name)
+                        owner_display_name = json_string_value(js_owner_display_name);
+                if ( NULL != owner && NULL != owner_display_name ) {
+                        export->owner_id = strdup(owner);
+                        export->owner_display_name = strdup(owner_display_name);
+                        if (NULL == export->owner_id || NULL == export->owner_display_name)
+                                ret = -1;
+                }
+                else {
+                        LogCrit(COMPONENT_FSAL,
+                                "dbd_collect_bucket_attributes(%s) missing owner information",
+                                export->bucket);
+                        ret = -1;
+                }
+        }
+        else {
+                LogCrit(COMPONENT_FSAL,
+			"dbd_collect_bucket_attributes(%s) request failed",
+			export->bucket);
+		ret = -1;
+        }
+	dbd_response_free(response);
+	return ret;
+}
+
+static int
+dbd_getattr_regular_file(struct scality_fsal_export* export,
+			 struct scality_fsal_obj_handle *object_hdl);
 
 static int
 dbd_getattr_directory(struct scality_fsal_export* export,
@@ -566,7 +747,7 @@ dbd_getattr_directory(struct scality_fsal_export* export,
 		.maxkeys = 1
 	};
 	dbd_response_t *response = NULL;
-	response = dbd_get(export, NULL, &parameters);
+	response = dbd_get(export, BUCKET_BASE_PATH, NULL, &parameters);
 	if ( NULL != response && response->http_status == 200 ) {
 
 		json_t *commonPrefixes = json_object_get(response->body, "CommonPrefixes");
@@ -586,7 +767,12 @@ dbd_getattr_directory(struct scality_fsal_export* export,
 		ret = -1;
 	}
 	dbd_response_free(response);
-	return ret;
+
+        if ( 0 == ret ) {
+                (void)dbd_getattr_regular_file(export, object_hdl);
+                
+        }
+        return ret;
 }
 
 static int
@@ -614,13 +800,21 @@ dbd_get_parts_size(struct scality_fsal_export *export,
 	return 0;
 }
 
-int
+static int
 dbd_getattr_regular_file(struct scality_fsal_export* export,
 			 struct scality_fsal_obj_handle *object_hdl)
 {
 	int ret = 0;
 	dbd_response_t *response = NULL;
-	response = dbd_get(export, object_hdl->object ,NULL);
+        char object[MAX_URL_SIZE];
+        bool directory = DIRECTORY == object_hdl->attributes.type;
+
+        snprintf(object, sizeof object,
+                 directory
+                 ? "%s"S3_DELIMITER
+                 : "%s", object_hdl->object);
+        
+	response = dbd_get(export, BUCKET_BASE_PATH, object ,NULL);
 	if ( NULL == response ) {
 		ret = -1;
 		goto out;
@@ -657,34 +851,10 @@ dbd_getattr_regular_file(struct scality_fsal_export* export,
 	switch(json_typeof(last_modified)) {
 	case JSON_STRING: {
 		const char *ts_str = json_string_value(last_modified);
-		int y,M,d,h,m;
-		double s;
-		int ret = sscanf(ts_str, "%d-%d-%dT%d:%d:%lfZ", &y, &M, &d, &h, &m, &s);
-		if ( 6 != ret ) {
-			LogCrit(COMPONENT_FSAL, "sscanf failed for %s, on %s. got %d fields",
-				object_hdl->object, ts_str, ret);
-		} else {
-			LogDebug(COMPONENT_FSAL,"%s: last-modified: %d-%d-%d %d:%d:%f",
-				object_hdl->object, y, M, d, h, m, s);
-			struct tm tm = {
-				.tm_year = y-1900,
-				.tm_mon = M-1,
-				.tm_mday = d,
-				.tm_hour = h,
-				.tm_min = m,
-				.tm_sec = (int)s,
-				.tm_isdst = -1,
-			};
-			time_t t = timegm(&tm);
-			object_hdl->attributes.mtime = (struct timespec) {
-				.tv_sec = t,
-				.tv_nsec = (s-(int)s)*1000000000,
-			};
-			object_hdl->attributes.atime = object_hdl->attributes.mtime;
-			object_hdl->attributes.ctime = object_hdl->attributes.mtime;
-			object_hdl->attributes.chgtime = object_hdl->attributes.mtime;
-		}
-		
+		object_hdl->attributes.mtime = iso8601_str2timespec(ts_str);
+		object_hdl->attributes.atime = object_hdl->attributes.mtime;
+		object_hdl->attributes.ctime = object_hdl->attributes.mtime;
+		object_hdl->attributes.chgtime = object_hdl->attributes.mtime;
 		break;
 	}
 	default:
@@ -701,8 +871,11 @@ dbd_getattr_regular_file(struct scality_fsal_export* export,
 	object_hdl->locations = NULL;
 	object_hdl->n_locations = 0;
 
-	json_t *location = json_object_get(response->body, "location");
-	switch(json_typeof(location)) {
+	json_t *location = directory
+                ? NULL
+                : json_object_get(response->body, "location");
+
+	switch(location? json_typeof(location) : JSON_NULL) {
 	case JSON_STRING:
 		object_hdl->locations = gsh_malloc(sizeof(struct scality_location));
 		object_hdl->locations[0].start = 0;
@@ -820,13 +993,17 @@ get_payload(struct scality_fsal_export* export,
 	char size[32];
 	size_t ret;
 	char md5[36];
+        bool regular_file = REGULAR_FILE == object_hdl->attributes.type;
+        bool directory = DIRECTORY == object_hdl->attributes.type;
 
-	if ( REGULAR_FILE != object_hdl->attributes.type )
-		return NULL;
-	
+        if (!regular_file && !directory)
+                return NULL;
+
 	gmtime_r(&time, &tm);
 	
-	snprintf(size, sizeof(size), "%zu", object_hdl->attributes.filesize);
+        snprintf(size, sizeof(size), "%zu", regular_file
+                 ? object_hdl->attributes.filesize
+                 : 0 );
 	ret = strftime(date, sizeof(date), "%Y-%m-%dT%H:%M:%S", &tm);
 	snprintf(date+ret, sizeof(date)-ret, ".%03ldZ", object_hdl->attributes.mtime.tv_nsec/1000000);
 
@@ -840,7 +1017,9 @@ get_payload(struct scality_fsal_export* export,
 	json_object_set(metadata, "owner-display-name", json_string(export->owner_display_name));
 	json_object_set(metadata, "owner-id", json_string(export->owner_id));
 	json_object_set(metadata, "content-length", json_string(size));
-	json_object_set(metadata, "content-type", json_string(DEFAULT_CONTENT_TYPE));
+	json_object_set(metadata, "content-type", json_string(regular_file
+                                                              ? DEFAULT_CONTENT_TYPE
+                                                              : DIRECTORY_CONTENT_TYPE));
 	//empty string md5
 	json_object_set(metadata, "content-md5", json_string(md5));
 	json_object_set(metadata, "x-amz-server-side-encryption", json_string(""));
@@ -921,6 +1100,13 @@ dbd_post(struct scality_fsal_export* export,
 	long http_status;
 	int ret = -1;
 
+        if ( 0 == object_hdl->object[0]) {
+                //FIXME
+                //set bucket attributes must not be done here
+                //does nothing and return success
+                return 0;
+        }
+        
 	if ( NULL == payload )
 		return ret;
 	
@@ -933,8 +1119,20 @@ dbd_post(struct scality_fsal_export* export,
 		.buf = payload,
 		.size = strlen(payload)
 	};
+        const char *format;
+        switch (object_hdl->obj_handle.type) {
+        case DIRECTORY:
+                format = "%s"BUCKET_BASE_PATH"/%s/%s/";
+                break;
+        case REGULAR_FILE:
+                format = "%s"BUCKET_BASE_PATH"/%s/%s";
+                break;
+        default:
+                LogCrit(COMPONENT_FSAL, "Invalid object type");
+                return -1;
+        }
 	char *tmp = curl_easy_escape(curl, object_hdl->object, strlen(object_hdl->object));
-	snprintf(url, sizeof(url), "%s/%s/%s",
+	snprintf(url, sizeof(url), format,
 		 export->module->dbd_url, export->bucket, tmp);
 	free(tmp);
 	curl_easy_setopt(curl, CURLOPT_URL, url);

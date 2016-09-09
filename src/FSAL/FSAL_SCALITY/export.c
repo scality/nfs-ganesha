@@ -176,10 +176,9 @@ static attrmask_t fs_supported_attrs(struct fsal_export *exp_hdl)
 
 static uint32_t fs_umask(struct fsal_export *exp_hdl)
 {
-	struct fsal_staticfsinfo_t *info;
-
-	info = scality_staticinfo(exp_hdl->fsal);
-	return fsal_umask(info);
+	struct scality_fsal_export *myself;
+	myself = container_of(exp_hdl, struct scality_fsal_export, export);
+	return myself->umask;
 }
 
 static uint32_t fs_xattr_access_rights(struct fsal_export *exp_hdl)
@@ -290,10 +289,8 @@ static struct config_item export_params[] = {
 	CONF_ITEM_NOOP("name"),
 	CONF_MAND_STR("bucket", 1, MAXPATHLEN, NULL,
 		      scality_fsal_export, bucket),
-	CONF_MAND_STR("owner_display_name", 1, MAXPATHLEN, NULL,
-		      scality_fsal_export, owner_display_name),
-	CONF_MAND_STR("owner_id", 1, MAXPATHLEN, NULL,
-		      scality_fsal_export, owner_id),
+        CONF_ITEM_MODE("umask", 0022,
+                       scality_fsal_export, umask),
 	CONFIG_EOL
 };
 
