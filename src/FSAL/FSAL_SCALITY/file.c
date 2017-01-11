@@ -64,7 +64,9 @@ fsal_status_t scality_open(struct fsal_obj_handle *obj_hdl,
 		if (FSAL_IS_ERROR(status)) {
 			myself->openflags = FSAL_O_CLOSED;
 		}
-		assert(myself->state == SCALITY_FSAL_OBJ_STATE_CLEAN);
+                //FIXME: having state greater than _CLEAN at this point
+                //denotes an issue with concurrency management
+		assert(myself->state >= SCALITY_FSAL_OBJ_STATE_CLEAN);
 	}
 
 	return status;
@@ -304,6 +306,8 @@ scality_truncate(struct scality_fsal_obj_handle *myself,
 			return fsalstat(ERR_FSAL_SERVERFAULT, 0);
 	}
 	else if ( filesize < myself->attributes.filesize ) {
+                /* this loop assumes that parts are ordered by
+                 * there start position in the avl tree */
 		for ( node = avltree_last(&myself->locations) ;
 		      node != NULL ;
 		      node = avltree_last(&myself->locations) ) {
@@ -311,7 +315,7 @@ scality_truncate(struct scality_fsal_obj_handle *myself,
 				avltree_container_of(node,
 						     struct scality_location,
 						     avltree_node);
-			if ( filesize < loc->start ) {
+			if ( filesize == 0 || filesize < loc->start ) {
 				avltree_remove(node, &myself->locations);
 				myself->memory_used -= 2 * loc->buffer_size;
 				if ( NULL != loc->key ) {
@@ -328,9 +332,9 @@ scality_truncate(struct scality_fsal_obj_handle *myself,
 			else {
 				break;
 			}
-			myself->attributes.spaceused = filesize;
-			myself->attributes.filesize = filesize;
 		}
+                myself->attributes.spaceused = filesize;
+                myself->attributes.filesize = filesize;
 	}
 	myself->state = SCALITY_FSAL_OBJ_STATE_DIRTY;
 	return fsalstat(ERR_FSAL_NO_ERROR, 0);
