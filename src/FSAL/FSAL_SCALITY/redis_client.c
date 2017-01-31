@@ -61,10 +61,10 @@ get_redis_context(void)
 			      export);
 
 	ctx__ = redisConnect(export->module->redis_host,
-			     ntohs(export->module->redis_port));
+			     export->module->redis_port);
 	LogDebug(COMPONENT_FSAL,
 		"REDIS CONNECT TO %s:%d", export->module->redis_host,
-		ntohs(export->module->redis_port));
+                 export->module->redis_port);
 
 	if ( NULL == ctx__ ) {
 		LogCrit(COMPONENT_FSAL,

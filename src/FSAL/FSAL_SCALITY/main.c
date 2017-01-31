@@ -92,7 +92,7 @@ static struct config_item scality_params[] = {
 		       scality_fsal_module, sproxyd_url),
 	CONF_ITEM_STR("redis_host", 1, MAXHOSTNAMELEN, "127.0.0.1",
 		      scality_fsal_module, redis_host),
-	CONF_ITEM_INET_PORT("redis_port", 1, UINT16_MAX/2, 6379,
+	CONF_ITEM_UI16("redis_port", 1, UINT16_MAX/2, 6379,
 			    scality_fsal_module, redis_port),
 	CONFIG_EOL
 };
@@ -139,8 +139,10 @@ static fsal_status_t init_config(struct fsal_module *fsal_hdl,
 		LogCrit(COMPONENT_FSAL, "Load configuration failed");
 		return fsalstat(ERR_FSAL_INVAL, 0);
 	}
-	if (!config_error_is_harmless(err_type))
+	if (!config_error_is_harmless(err_type)) {
+		LogCrit(COMPONENT_FSAL, "Load configuration failed with an harmfull error");
 		return fsalstat(ERR_FSAL_INVAL, 0);
+        }
 
 	display_fsinfo(&scality_me->fs_info);
 	LogFullDebug(COMPONENT_FSAL,
@@ -152,6 +154,13 @@ static fsal_status_t init_config(struct fsal_module *fsal_hdl,
 	LogDebug(COMPONENT_FSAL,
 		 "FSAL INIT: Supported attributes mask = 0x%" PRIx64,
 		 scality_me->fs_info.supported_attrs);
+        LogInfo(COMPONENT_FSAL,
+                 "SCALITY: DBD url: %s", scality_me->dbd_url);
+        LogInfo(COMPONENT_FSAL,
+                 "SCALITY: sproxyd url: %s", scality_me->sproxyd_url);
+        LogInfo(COMPONENT_FSAL,
+                 "SCALITY: redis server: %s:%d", scality_me->redis_host,
+                 scality_me->redis_port);
 	return fsalstat(ERR_FSAL_NO_ERROR, 0);
 }
 
