@@ -1404,6 +1404,30 @@ fsal_status_t scality_lookup_path(struct fsal_export *exp_hdl,
 	return fsalstat(ERR_FSAL_NO_ERROR, 0);
 }
 
+static int
+recreate_root_handle(struct scality_fsal_export *export,
+		     char *object_buf, size_t object_buf_len)
+{
+	int ret;
+	ret = name_to_object(NULL, export->export_path,
+			     object_buf, object_buf_len);
+	if (ret < 0) {
+		LogCrit(COMPONENT_FSAL,
+			"Failed to translate export_path to object: %s",
+			export->export_path);
+		return ret;
+	}
+	ret = redis_create_handle_key(object_buf,
+				      export->root_handle->handle,
+				      SCALITY_OPAQUE_SIZE);
+	if ( ret < 0) {
+		LogCrit(COMPONENT_FSAL,
+			"Failed to create a wire handle for object: %s",
+			object_buf);
+	}
+	return ret;
+}
+
 /* create_handle
  * Does what original FSAL_ExpandHandle did (sort of)
  * returns a ref counted handle to be later used in cache_inode etc.
@@ -1443,7 +1467,16 @@ fsal_status_t scality_create_handle(struct fsal_export *exp_hdl,
 			       object, sizeof object);
 	if ( ret < 0 ) {
 		LogDebug(COMPONENT_FSAL, "missed handle");
-		return fsalstat(ERR_FSAL_STALE, ESTALE);
+		if ( 0 == memcmp(export->root_handle->handle,
+				 hdl_desc->addr,
+				 SCALITY_OPAQUE_SIZE) ) {
+			ret = recreate_root_handle(export,
+						   object, sizeof object);
+			if ( ret < 0 )
+				return fsalstat(ERR_FSAL_SERVERFAULT, 0);
+		} else {
+			return fsalstat(ERR_FSAL_STALE, ESTALE);
+		}
 	}
 
 	LogDebug(COMPONENT_FSAL, "handle match for %s", object);
