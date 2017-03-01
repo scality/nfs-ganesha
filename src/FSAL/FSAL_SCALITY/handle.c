@@ -1274,6 +1274,60 @@ void scality_handle_ops_init(struct fsal_obj_ops *ops)
 
 }
 
+static fsal_status_t
+namei(struct scality_fsal_export *export,
+      const char *path,
+      struct fsal_obj_handle **handle)
+{
+	fsal_status_t status;
+	struct fsal_obj_handle *dir;
+	char *tmp;
+	size_t path_len = strlen(path);
+	size_t export_len = strlen(export->export_path);
+
+	if (export_len > path_len) {
+		return fsalstat(ERR_FSAL_INVAL, 0);
+	}
+
+	path_len -= export_len;
+	char *p = alloca(path_len+1);
+	strcpy(p, path+export_len);
+
+	dir = &export->root_handle->obj_handle;
+	handle_get_ref(dir);
+
+	for ( p = strtok_r(p, "/", &tmp) ;
+	      p != NULL ;
+	      p = strtok_r(NULL, "/", &tmp) ) {
+		struct attrlist attrs;
+		struct fsal_obj_handle *child;
+
+		if (dir->type != DIRECTORY) {
+			LogDebug(COMPONENT_FSAL,
+				 "component is not a directory");
+			status = fsalstat(ERR_FSAL_NOTDIR, ENOTDIR);
+			break;
+		}
+
+		fsal_prepare_attrs(&attrs, 0);
+		status = lookup(dir, p, &child, &attrs);
+		if (FSAL_IS_ERROR(status)) {
+			LogDebug(COMPONENT_FSAL,
+				 "lookup faile when namei '%s' on '%s'",
+				 path, p);
+			break;
+		}
+		handle_put_ref(dir);
+		dir = child;
+	}
+	if (FSAL_IS_ERROR(status)) {
+		handle_put_ref(dir);
+		return status;
+	}
+	*handle = dir;
+	return fsalstat(ERR_FSAL_NO_ERROR, 0);
+}
+
 /* export methods that create object handles
  */
 
@@ -1292,14 +1346,6 @@ fsal_status_t scality_lookup_path(struct fsal_export *exp_hdl,
 	myself = container_of(exp_hdl, struct scality_fsal_export, export);
 
 	LogDebug(COMPONENT_FSAL, "lookup_path(%s)", path);
-
-	if (strcmp(path, myself->export_path) != 0) {
-		/* Lookup of a path other than the export's root. */
-		LogCrit(COMPONENT_FSAL,
-			"Attempt to lookup non-root path %s",
-			path);
-		return fsalstat(ERR_FSAL_NOENT, ENOENT);
-	}
 
 	if (myself->root_handle == NULL) {
 		int ret;
@@ -1329,21 +1375,32 @@ fsal_status_t scality_lookup_path(struct fsal_export *exp_hdl,
 				     exp_hdl,
 				     DBD_DTYPE_DIRECTORY,
 				     NULL);
-		if (attrs_out) {
-			fsal_status_t status;
-			status = getattrs(&myself->root_handle->obj_handle,
-					  attrs_out);
-			if (FSAL_IS_ERROR(status)) {
-				LogCrit(COMPONENT_FSAL,
-					"Unable to getatr on %s",
-					myself->root_handle->object);
-				return status;
-			}
-		}
 	}
 
-	*handle = &myself->root_handle->obj_handle;
+	if (strcmp(path, myself->export_path) != 0) {
+		fsal_status_t status;
+		status = namei(myself, path, handle);
+		if (FSAL_IS_ERROR(status)) {
+			LogDebug(COMPONENT_FSAL,
+				"Could not resolve path to handle on %s",
+				path);
+			return status;
+		}
+	} else {
+		*handle = &myself->root_handle->obj_handle;
+	}
 
+	if (attrs_out) {
+		fsal_status_t status;
+		status = getattrs(*handle,
+				  attrs_out);
+		if (FSAL_IS_ERROR(status)) {
+			LogCrit(COMPONENT_FSAL,
+				"Unable to getatr on %s",
+				myself->root_handle->object);
+			return status;
+		}
+	}
 	return fsalstat(ERR_FSAL_NO_ERROR, 0);
 }
 
