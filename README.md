@@ -14,14 +14,14 @@ This is a fork of Ganesha to add a Scality S3 FSAL plugin to be able to expose b
 Scality FSAL module
 =============
 
-####Purpose of the module
+#### Purpose of the module
 
 The Scality FSAL module purpose is to expose through an NFS export the content of buckets created using the Scality S3 Connector.
 
 To access data, this module doesn't make usage of the S3 connector. In contrast, it makes direct connections to the Metadata DBD Rest server in order to retrieve objects metadata and locations. And connet directly to the sproxyd daemon for data retrieval.
 
 
-####Running nfs-ganesha in a Docker container
+#### Running nfs-ganesha in a Docker container
 
 How to run ganesha with the Scality FSAL accessing an S3 bucket in a minute.
 
