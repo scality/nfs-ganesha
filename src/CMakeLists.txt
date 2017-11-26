@@ -61,14 +61,17 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
   set(DISTRO "UNKNOWN")
   set(LIBEXECDIR "/usr/libexec")
 
-  EXECUTE_PROCESS(
+  if( EXISTS /etc/centos-release )
+    SET(SYS_RELEASE "Centos")
+  else()
+    EXECUTE_PROCESS(
       COMMAND awk -F=  "/^NAME=/ { print $2 }" /etc/os-release
       OUTPUT_VARIABLE SYS_RELEASE
       ERROR_QUIET
-   )
-# Red Hat Enterprise Linux versions before 7.0 will be detected as UNKNOWN
+     )
+  endif( EXISTS /etc/centos-release )
 
-  if( ${SYS_RELEASE} MATCHES "Red Hat" )
+  if( ${SYS_RELEASE} MATCHES "Red Hat" OR ${SYS_RELEASE} MATCHES "Centos")
      message( STATUS "Detected a Linux Red Hat machine" )
      set(DISTRO "RED_HAT")
   elseif( ${SYS_RELEASE} MATCHES "Fedora" )
@@ -86,10 +89,10 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
      message( STATUS "Detected a Linux Debian base machine" )
      set(DISTRO "DEBIAN")
      set(LIBEXECDIR "/usr/lib")
-  else( ${SYS_RELEASE} MATCHES "Red Hat" )
+  else()
      message( STATUS "Detected an UNKNOWN Linux machine" )
      set(DISTRO "UNKNOWN")
-  endif( ${SYS_RELEASE} MATCHES "Red Hat" )
+  endif( ${SYS_RELEASE} MATCHES "Red Hat" OR ${SYS_RELEASE} MATCHES "Centos")
 endif(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "FreeBSD")
