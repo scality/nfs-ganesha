@@ -311,6 +311,27 @@ void Fatal(void)
 	exit(2);
 }
 
+static const char *relative_filepath(const char *file)
+{
+	int len = strlen(file);
+	int i;
+	int token = 0;
+
+	for (i = len - 1; i >= 0; i--) {
+		if (file[i] == '/')
+			token++;
+		/* get only 2 elements in path to log (module/filename.c) */
+		if (token == 2)
+			break;
+	}
+
+	/* if filepath is already relative */
+	if (token < 2)
+		return file;
+
+	return file + (i + 1);
+}
+
 #ifdef _DONT_HAVE_LOCALTIME_R
 
 /* Localtime is not reentrant...
@@ -1425,9 +1446,11 @@ static int display_log_component(struct display_buffer *dsp_log,
 
 	if (b_left > 0 && logfields->disp_filename) {
 		if (logfields->disp_linenum)
-			b_left = display_printf(dsp_log, "%s:", file);
+			b_left = display_printf(dsp_log, "%s:",
+						relative_filepath(file));
 		else
-			b_left = display_printf(dsp_log, "%s :", file);
+			b_left = display_printf(dsp_log, "%s :",
+						relative_filepath(file));
 	}
 
 	if (b_left > 0 && logfields->disp_linenum)
