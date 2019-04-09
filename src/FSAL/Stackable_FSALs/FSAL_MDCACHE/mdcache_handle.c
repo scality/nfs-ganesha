@@ -566,12 +566,6 @@ static fsal_status_t mdcache_readdir(struct fsal_obj_handle *dir_hdl,
 /**
  * @brief Check access for a given user against a given object
  *
- * Currently, all FSALs use the default method.  We call the default method
- * directly, so that the test uses cached attributes, rather than having the
- * lower level need to query attributes each call.  This works as long as all
- * FSALs call the default method.  This should be revisited if a FSAL wants to
- * override test_access().
- *
  * @note If @a owner_skip is provided, we test against the cached owner.  This
  * is because doing a getattrs() potentially on each read and write (writes
  * invalidate cached attributes) is a huge performance hit.  Eventually, finer
@@ -591,14 +585,15 @@ static fsal_status_t mdcache_test_access(struct fsal_obj_handle *obj_hdl,
 					 fsal_accessflags_t *denied,
 					 bool owner_skip)
 {
+	fsal_status_t status;
 	mdcache_entry_t *entry =
 		container_of(obj_hdl, mdcache_entry_t, obj_handle);
-
-	if (owner_skip && entry->attrs.owner == op_ctx->creds->caller_uid)
-		return fsalstat(ERR_FSAL_NO_ERROR, 0);
-
-	return fsal_test_access(obj_hdl, access_type, allowed, denied,
-				owner_skip);
+	subcall(
+		status = entry->sub_handle->obj_ops->test_access(
+			entry->sub_handle,
+			access_type, allowed, denied, owner_skip)
+	       );
+	return status;
 }
 
 /**
