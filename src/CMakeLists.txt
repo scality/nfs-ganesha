@@ -172,6 +172,13 @@ endif(FREEBSD)
 if (LINUX)
     set(PLATFORM "LINUX")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64")
+    if( "${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}" VERSION_GREATER "3.11" )
+        # we need no-error=format-truncation to compile with gcc 8.3.0
+        # settings the flag this this way does not work with CMake 2.8.12.2 (centos7) 
+        # it leads to configure issue (see: http://www.gccxml.org/Bug/view.php?id=9670&nbn=4)
+        # tested with 3.12.1 but this may work with previous version...
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-error=format-truncation")
+    endif ( "${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}" VERSION_GREATER "2.8" )
     set(OS_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/include/os/linux")
     find_library(LIBDL dl)  # module loader
 endif(LINUX)
@@ -999,6 +1006,7 @@ endif(USE_LTTNG)
 
 add_subdirectory(scripts)
 add_subdirectory(doc)
+
 # display configuration vars
 
 message(STATUS)
