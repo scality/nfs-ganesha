@@ -959,6 +959,8 @@ set(SYSTEM_LIBRARIES
   ${NTIRPC_LIBRARY}
 )
 
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -include ${NTIRPC_INCLUDE_DIR}/xdr_redefine.h")
+
 # Config file; make sure it doesn't clobber an existing one
 include(${CMAKE_SOURCE_DIR}/cmake/modules/InstallPackageConfigFile.cmake)
 InstallPackageConfigFile(${CMAKE_SOURCE_DIR}/config_samples/ganesha.conf.example ${SYSCONFDIR}/ganesha ganesha.conf)
