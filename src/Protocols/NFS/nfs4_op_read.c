@@ -552,6 +552,7 @@ static enum nfs_req_result nfs4_read(struct nfs_argop4 *op,
 	READ4resok *resok = &res_READ4->READ4res_u.resok4;
 
 	res_READ4->status = NFS4_OK;
+	server_stats_io_start(NFS4_OP_READ);
 
 	/* Do basic checks on a filehandle Only files can be read */
 	res_READ4->status = nfs4_sanity_check_FH(data, REGULAR_FILE, true);
