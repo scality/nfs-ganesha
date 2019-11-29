@@ -275,6 +275,7 @@ enum nfs_req_result nfs4_op_write(struct nfs_argop4 *op, compound_data_t *data,
 	if (res_WRITE4->status != NFS4_OK)
 		return NFS_REQ_ERROR;
 
+	server_stats_io_start(NFS4_OP_WRITE);
 	/* NB: After this points, if state_found == NULL, then
 	 * the stateid is all-0 or all-1
 	 */
