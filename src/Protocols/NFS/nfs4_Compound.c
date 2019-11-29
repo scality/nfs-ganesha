@@ -829,6 +829,7 @@ enum nfs_req_result process_one_op(compound_data_t *data, nfsstat4 *status)
 	}
 
 	/* time each op */
+	server_stats_nfsv4_op_start(data->opcode, &data->op_stat_data);
 	now(&ts);
 	data->op_start_time = timespec_diff(&nfs_ServerBootTime, &ts);
 

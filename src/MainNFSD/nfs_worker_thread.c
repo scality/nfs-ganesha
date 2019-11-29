@@ -723,8 +723,11 @@ void complete_request(nfs_request_t *reqdata,
 
 	/* NFSv4 stats are handled in nfs4_compound() */
 	if (reqdata->svc.rq_msg.cb_prog != NFS_program[P_NFS]
-	    || reqdata->svc.rq_msg.cb_vers != NFS_V4)
+	    || reqdata->svc.rq_msg.cb_vers != NFS_V4
+	    || (reqdata->svc.rq_msg.cb_vers == NFS_V4
+	         && reqdata->svc.rq_msg.cb_proc == NFSPROC4_NULL)) {
 		server_stats_nfs_done(reqdata, rc, false);
+	}
 
 	/* If request is dropped, no return to the client */
 	if (rc == NFS_REQ_DROP) {
@@ -969,6 +972,7 @@ static enum xprt_stat nfs_rpc_process_request(nfs_request_t *reqdata)
 	 * we measure all time stats as intervals (elapsed nsecs) from
 	 * server boot time.  This gets high precision with simple 64 bit math.
 	 */
+	server_stats_nfs_start(reqdata, &op_ctx->op_stat_data);
 	now(&timer_start);
 	op_ctx->start_time = timespec_diff(&nfs_ServerBootTime, &timer_start);
 
