@@ -346,6 +346,7 @@ struct compound_data {
 					       savedFH */
 	struct svc_req *req;	/*< RPC Request related to the compound */
 	struct timespec op_start_time;
+	struct stats_data op_stat_data;
 	nfs_argop4 *argarray;
 	nfs_res_t *res;
 	nfs_resop4 *resarray;

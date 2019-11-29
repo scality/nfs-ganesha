@@ -250,6 +250,8 @@ int nfs3_read(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 		" start: %"PRIx64 " len: %zu",
 		offset, size);
 
+	server_stats_io_start(NFSPROC3_READ);
+
 	/* to avoid setting it on each error case */
 	resfail->file_attributes.attributes_follow =  FALSE;
 
