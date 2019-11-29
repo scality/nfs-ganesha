@@ -403,6 +403,24 @@ struct io_hints {
 	uint32_t hints;
 };
 
+typedef enum {
+	STATS_TIME_START,
+	STATS_TIME_FINISH,
+	STATS_IO_START,
+	STATS_IO_FINISH,
+	STATS_COUNT
+} stats_ops;
+
+
+#define FSAL_STAT_DATA_SIZE 64
+struct stats_data {
+	size_t transferred_amount;
+	char fsal_data[FSAL_STAT_DATA_SIZE];
+};
+
+typedef void (*stats_func)(stats_ops op, int proto_vers,
+			   int nfs_op, bool error, struct stats_data *data);
+
 /**
  * @brief request op context
  *
@@ -458,6 +476,7 @@ struct req_op_context {
 	struct fsal_module *fsal_module;	/*< current fsal module */
 	struct fsal_pnfs_ds *fsal_pnfs_ds;	/*< current pNFS DS */
 	/* add new context members here */
+	struct stats_data op_stat_data;
 };
 
 /**
@@ -704,6 +723,8 @@ struct fsal_ops {
  * @param[in] fsal_hdl          FSAL module
  */
 	void (*fsal_reset_stats)(struct fsal_module *const fsal_hdl);
+
+	stats_func stats_record;
 
 /**@}*/
 };

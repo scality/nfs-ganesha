@@ -218,6 +218,8 @@ int nfs3_write(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 			: arg->arg_write3.stable == UNSTABLE ? "DATA_SYNC"
 			: "FILE_SYNC");
 
+	server_stats_io_start(NFSPROC3_WRITE);
+
 	/* to avoid setting it on each error case */
 	resfail->file_wcc.before.attributes_follow = false;
 	resfail->file_wcc.after.attributes_follow = false;
