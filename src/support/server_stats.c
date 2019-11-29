@@ -162,6 +162,12 @@ static const uint32_t nfsv42_optype[NFS_V42_NB_OPERATION] = {
 	[NFS4_OP_READ_PLUS] = READ_OP,
 };
 
+stats_func alternate_stats_record;
+void register_alternate_stats_func(stats_func func)
+{
+	alternate_stats_record = func;
+}
+
 /* latency stats
  */
 struct op_latency {
@@ -1330,6 +1336,18 @@ static void record_v3_full_stats(nfs_request_t *reqdata,
 static void record_v4_full_stats(uint32_t proc, nsecs_elapsed_t request_time,
 				 nfsstat4 status);
 
+void server_stats_nfs_start(nfs_request_t *reqdata, struct stats_data *data)
+{
+	struct svc_req *req = &reqdata->svc;
+	uint32_t proto_op = req->rq_msg.cb_proc;
+	uint32_t program_op = req->rq_msg.cb_prog;
+
+	if(alternate_stats_record  && program_op == NFS_PROGRAM) {
+		alternate_stats_record(STATS_TIME_START, op_ctx->nfs_vers,
+				       proto_op, 0, &op_ctx->op_stat_data);
+	}
+}
+
 /**
  * @brief record NFS op finished
  *
@@ -1344,6 +1362,16 @@ void server_stats_nfs_done(nfs_request_t *reqdata, int rc, bool dup)
 	struct svc_req *req = &reqdata->svc;
 	uint32_t proto_op = req->rq_msg.cb_proc;
 	uint32_t program_op = req->rq_msg.cb_prog;
+
+	if(alternate_stats_record
+	   && program_op == NFS_PROGRAM
+	   && (op_ctx->nfs_vers == NFS_V3
+                || (op_ctx->nfs_vers == NFS_V4 && proto_op == NFSPROC4_NULL))) {
+
+		alternate_stats_record(STATS_TIME_FINISH, op_ctx->nfs_vers,
+				       proto_op, rc != NFS_REQ_OK,
+				       &op_ctx->op_stat_data);
+	}
 
 	if (!nfs_param.core_param.enable_NFSSTATS)
 		return;
@@ -1399,6 +1427,38 @@ void server_stats_nfs_done(nfs_request_t *reqdata, int rc, bool dup)
 	}
 }
 
+void server_stats_nfsv4_op_start(int proto_op, struct stats_data *data)
+{
+	if(alternate_stats_record) {
+		alternate_stats_record(STATS_TIME_START, NFS_V4,
+				       proto_op, 0, &op_ctx->op_stat_data);
+	}
+}
+
+static bool
+stats_record_is_error(nfsstat4 status)
+{
+  switch(status)
+  {
+    case NFS4_OK:
+    case NFS4ERR_PERM:
+    case NFS4ERR_NOENT:
+    case NFS4ERR_ACCESS:
+    case NFS4ERR_EXIST:
+    case NFS4ERR_NOTDIR:
+    case NFS4ERR_ISDIR:
+    case NFS4ERR_NOSPC:
+    case NFS4ERR_NAMETOOLONG:
+    case NFS4ERR_NOTEMPTY:
+    case NFS4ERR_DQUOT:
+    case NFS4ERR_NOTSUPP:
+    case NFS4ERR_BADSESSION:
+      return false;
+    default:
+      return true;
+  }
+}
+
 /**
  * @brief record NFS V4 compound finished
  *
@@ -1411,6 +1471,12 @@ void server_stats_nfsv4_op_done(int proto_op, struct timespec *start_time,
 	struct gsh_client *client = op_ctx->client;
 	struct timespec current_time;
 	nsecs_elapsed_t time_diff;
+
+	if(alternate_stats_record) {
+		alternate_stats_record(STATS_TIME_FINISH, NFS_V4,
+				       proto_op, stats_record_is_error(status),
+				       &op_ctx->op_stat_data);
+	}
 
 	if (!nfs_param.core_param.enable_NFSSTATS)
 		return;
@@ -1479,6 +1545,12 @@ void server_stats_compound_done(int num_ops, int status)
 	struct timespec current_time;
 	nsecs_elapsed_t time_diff;
 
+	if(alternate_stats_record)
+		alternate_stats_record(STATS_COUNT, NFS_V4,
+				       NFSPROC4_COMPOUND,
+				       stats_record_is_error(status),
+				       &op_ctx->op_stat_data);
+
 	if (!nfs_param.core_param.enable_NFSSTATS)
 		return;
 	now(&current_time);
@@ -1508,6 +1580,15 @@ void server_stats_compound_done(int num_ops, int status)
 	}
 }
 
+void server_stats_io_start(uint32_t proto_op)
+{
+	if(alternate_stats_record) {
+
+		alternate_stats_record(STATS_IO_START, op_ctx->nfs_vers,
+				       proto_op, 0, &op_ctx->op_stat_data);
+	}
+}
+
 /**
  * @brief Record I/O stats for protocol read/write
  *
@@ -1518,6 +1599,19 @@ void server_stats_compound_done(int num_ops, int status)
 void server_stats_io_done(size_t requested, size_t transferred, bool success,
 			  bool is_write)
 {
+	if(alternate_stats_record) {
+		int op;
+		if(op_ctx->nfs_vers == NFS_V3) {
+			op = is_write ? NFSPROC3_WRITE : NFSPROC3_READ;
+		} else {
+			op = is_write ? NFS4_OP_WRITE : NFS4_OP_READ;
+		}
+
+		op_ctx->op_stat_data.transferred_amount = transferred;
+		alternate_stats_record(STATS_IO_FINISH, op_ctx->nfs_vers, op,
+				!success, &op_ctx->op_stat_data);
+	}
+
 	if (!nfs_param.core_param.enable_NFSSTATS)
 		return;
 	if (op_ctx->client != NULL) {

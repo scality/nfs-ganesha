@@ -409,6 +409,24 @@ enum request_type {
 #endif /* _USE_9P */
 };
 
+typedef enum {
+	STATS_TIME_START,
+	STATS_TIME_FINISH,
+	STATS_IO_START,
+	STATS_IO_FINISH,
+	STATS_COUNT
+} stats_ops;
+
+
+#define FSAL_STAT_DATA_SIZE 80
+struct stats_data {
+	size_t transferred_amount;
+	char fsal_data[FSAL_STAT_DATA_SIZE];
+};
+
+typedef void (*stats_func)(stats_ops op, int proto_vers,
+			   int nfs_op, bool error, struct stats_data *data);
+
 /**
  * @brief request op context
  *
@@ -512,6 +530,8 @@ struct req_op_context {
 	} flags;
 	bool export_conditional_log; /* conditional log enable for export */
 	bool client_conditional_log; /* conditional log enable for client */
+
+	struct stats_data op_stat_data;
 };
 
 /**
@@ -840,6 +860,8 @@ struct fsal_ops {
  * monitoring services.
  */
 	void (*fsal_unregister_nfs_service)(void);
+
+	stats_func stats_record;
 
 	/**@}*/
 };
