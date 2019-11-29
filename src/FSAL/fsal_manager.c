@@ -56,6 +56,7 @@
 #include "pnfs_utils.h"
 #include "fsal_private.h"
 #include "FSAL/fsal_localfs.h"
+#include "server_stats.h"
 
 /**
  * @brief List of loaded fsal modules
@@ -653,6 +654,9 @@ int fsal_load_init(void *node, const char *name, struct fsal_module **fsal_hdl,
 				atomic_fetch_int32_t(&(*fsal_hdl)->refcount));
 			return 1;
 		}
+
+		if((*fsal_hdl)->m_ops.stats_record)
+			register_alternate_stats_func((*fsal_hdl)->m_ops.stats_record);
 	} else {
 		config_file_t myconfig;
 
