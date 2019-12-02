@@ -272,6 +272,10 @@ int main(int argc, char *argv[])
 		 __DATE__ " " __TIME__ " on " BUILD_HOST);
 #endif
 
+	gsh_free(exec_name);
+	gsh_free(nfs_host_name);
+	gsh_free(log_path);
+
 	/* initialize nfs_init */
 	nfs_init_init();
 
