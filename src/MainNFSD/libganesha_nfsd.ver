@@ -129,6 +129,7 @@
   msg_fsal_err;
   nfs_notify_grace_waiters;
   nfs4_ace_alloc;
+  nfs4_ace_free;
   nfs4_acl_entry_inc_ref;
   nfs4_acl_new_entry;
   nfs4_Compound_FreeOne;
