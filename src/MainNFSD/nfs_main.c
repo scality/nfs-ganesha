@@ -531,6 +531,10 @@ int main(int argc, char *argv[])
 
 fatal_die:
 	report_config_errors(&err_type, NULL, config_errs_to_log);
+
+	/* systemd journal won't display our errors without this */
+	sleep(1);
+
 	LogFatal(COMPONENT_INIT,
 		 "Fatal errors.  Server exiting...");
 	/* NOT REACHED */
