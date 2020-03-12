@@ -326,8 +326,8 @@ int load_fsal(const char *name, struct fsal_module **fsal_hdl_p)
 
 	LogDebug(COMPONENT_INIT, "Loading FSAL %s with %s", name, path);
 #if defined(LINUX) && !defined(SANITIZE_ADDRESS)
-	dl = dlopen(path, RTLD_NOW | RTLD_LOCAL | RTLD_DEEPBIND);
-#elif defined(BSDBASED) || defined(SANITIZE_ADDRESS)
+	dl = dlopen(path, RTLD_NOW | RTLD_LOCAL /* | RTLD_DEEPBIND */);
+#elif defined(FREEBSD) || defined(SANITIZE_ADDRESS)
 	dl = dlopen(path, RTLD_NOW | RTLD_LOCAL);
 #endif
 
