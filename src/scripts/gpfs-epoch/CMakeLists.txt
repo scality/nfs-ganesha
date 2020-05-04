@@ -1,6 +1,6 @@
 
 if(USE_FSAL_GPFS)
-  find_program(PYTHON NAMES "python3" "python")
+  find_program(PYTHON NAMES "python3" "python" HINTS "/usr/bin")
   if(PYTHON)
     set(SETUP_PY_IN "${CMAKE_CURRENT_SOURCE_DIR}/setup.py.in")
     set(SETUP_PY    "${CMAKE_CURRENT_BINARY_DIR}/setup.py")
