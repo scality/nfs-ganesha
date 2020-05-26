@@ -70,13 +70,13 @@
 #cmakedefine HAVE_URCU_REF_GET_UNLESS_ZERO 1
 #define NFS_GANESHA 1
 
-#define GANESHA_CONFIG_PATH "@SYSCONFDIR@/ganesha/ganesha.conf"
-#define GANESHA_PIDFILE_PATH "@SYSSTATEDIR@/run/ganesha.pid"
-#define NFS_V4_RECOV_ROOT "@SYSSTATEDIR@/lib/nfs/ganesha"
+#define GANESHA_CONFIG_PATH "@SYSCONFDIR@/@SERVICE_NAME@/ganesha.conf"
+#define GANESHA_PIDFILE_PATH "@SYSSTATEDIR@/run/@SERVICE_NAME@.pid"
+#define NFS_V4_RECOV_ROOT "@SYSSTATEDIR@/lib/nfs/@SERVICE_NAME@"
 /**
  * @brief Default value for krb5_param.ccache_dir
  */
-#define DEFAULT_NFS_CCACHE_DIR "@SYSSTATEDIR@/run/ganesha"
+#define DEFAULT_NFS_CCACHE_DIR "@SYSSTATEDIR@/run/@SERVICE_NAME@"
 
 /* We're LGPL'd */
 #define _LGPL_SOURCE 1
