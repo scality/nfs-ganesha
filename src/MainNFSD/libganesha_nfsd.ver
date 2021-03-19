@@ -208,6 +208,7 @@
   unclaim_fs;
   unix2fsal_mode;
   unregister_fsal;
+  up_async_invalidate;
   up_async_layoutrecall;
   up_async_lock_avail;
   up_async_lock_grant;
