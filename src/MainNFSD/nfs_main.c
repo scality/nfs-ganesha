@@ -392,12 +392,14 @@ int main(int argc, char *argv[])
 		if (fcntl(pidfile, F_SETLK, &lk) == -1)
 			LogFatal(COMPONENT_MAIN, "Ganesha already started");
 
-		/* Put pid into file, then close it */
+		/* Put pid into file, then sync it */
 		if (dprintf(pidfile, "%u\n", getpid()) < 0 ||
-		    close(pidfile) < 0)
+		    fsync(pidfile) < 0) {
+			close(pidfile);
 			LogCrit(COMPONENT_MAIN,
 				"Couldn't write pid to file %s error %s (%d)",
 				nfs_pidfile_path, strerror(errno), errno);
+		}
 	}
 
 	/* Set up for the signal handler.
@@ -527,10 +529,14 @@ int main(int argc, char *argv[])
 	if (log_path)
 		free(log_path);
 
+	close(pidfile);
+
 	return 0;
 
 fatal_die:
 	report_config_errors(&err_type, NULL, config_errs_to_log);
+
+	close(pidfile);
 
 	/* systemd journal won't display our errors without this */
 	sleep(1);
