@@ -578,12 +578,20 @@ endif(USE_GSS)
 
 gopt_test(USE_ADMIN_TOOLS)
 if (USE_ADMIN_TOOLS)
-  set(Python_ROOT_DIR "/usr/bin")
-  find_package (Python COMPONENTS Interpreter)
-  if (NOT Python_Interpreter_FOUND)
+  # The program found for the build is not only important for the build
+  # but will also have an impact on the final package.
+  #
+  # shebang from scripts will be patched with the used executable here
+  # which will then be picked-up by rpmbuild and the exact path will
+  # be added as a dependency.
+  #
+  # Here it hints for /usr/bin which hoping and expects that /usr/bin will
+  # be the successful path.
+  find_program(PYTHON_EXECUTABLE NAMES "python3" HINTS "/usr/bin")
+  if (NOT PYTHON_EXECUTABLE)
     message(WARNING "Cannot find python. Disablin admin tools")
     set(USE_ADMIN_TOOLS OFF)
-  endif (NOT Python_Interpreter_FOUND)
+  endif (NOT PYTHON_EXECUTABLE)
 endif (USE_ADMIN_TOOLS)
 
 gopt_test(USE_GUI_ADMIN_TOOLS)
