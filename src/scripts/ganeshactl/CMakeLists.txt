@@ -44,7 +44,7 @@ set(UI_SRC
   Ganesha/QtUI/ui_log_dialog.ui
   )
 
-if(Python_FOUND)
+if(PYTHON_EXECUTABLE)
   set(SETUP_PY_IN "${CMAKE_CURRENT_SOURCE_DIR}/setup.py.in")
   set(SETUP_PY    "${CMAKE_CURRENT_BINARY_DIR}/setup.py")
   set(OUTPUT      "${CMAKE_CURRENT_BINARY_DIR}/build/ganeshactl_timestamp")
@@ -118,7 +118,7 @@ if(Python_FOUND)
 
   add_custom_command(
     OUTPUT ${OUTPUT}
-    COMMAND ${Python_EXECUTABLE} "${SETUP_PY}"  build
+    COMMAND ${PYTHON_EXECUTABLE} "${SETUP_PY}"  build
     COMMAND ${CMAKE_COMMAND} -E touch ${OUTPUT}
     DEPENDS ${GANESHA_SRCS} ${UI_PY_FILES} ${SCRIPTS}
     )
@@ -127,9 +127,9 @@ if(Python_FOUND)
 
   install(
     CODE
-    "execute_process(WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} COMMAND ${Python_EXECUTABLE} ${SETUP_PY} install --skip-build --no-compile --prefix=\$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX})"
+    "execute_process(WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} COMMAND ${PYTHON_EXECUTABLE} ${SETUP_PY} install --skip-build --no-compile --prefix=\$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX})"
     )
-endif(Python_FOUND)
+endif(PYTHON_EXECUTABLE)
 
 # Man page
 set(man8_file ganesha_conf.man)
