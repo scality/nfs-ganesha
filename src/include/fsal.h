@@ -493,7 +493,7 @@ static inline void fsal_copy_attrs(struct fsal_attrlist *dest,
 	} else if (dest->acl != NULL && ((save_request_mask & ATTR_ACL) != 0)) {
 		/* Take reference on ACL if necessary */
 		nfs4_acl_entry_inc_ref(dest->acl);
-	} else {
+	} else if (dest->acl != NULL) {
 		/* Make sure acl is NULL and don't pass a ref back (so
 		 * caller when calling fsal_release_attrs will not have to
 		 * release the ACL reference).
