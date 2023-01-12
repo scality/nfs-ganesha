@@ -649,6 +649,35 @@ struct state_t *nfs4_State_Get_Pointer(char *other)
 	return state;
 }
 
+void nfs4_State_Put_Pointer(char *other)
+{
+        struct gsh_buffdesc buffkey;
+        struct gsh_buffdesc buffval;
+        hash_error_t rc;
+        struct hash_latch latch;
+        struct state_t *state;
+
+        buffkey.addr = other;
+        buffkey.len = OTHERSIZE;
+
+        rc = hashtable_getlatch(ht_state_id, &buffkey, &buffval, true, &latch);
+
+        if (rc != HASHTABLE_SUCCESS) {
+                if (rc == HASHTABLE_ERROR_NO_SUCH_KEY)
+                        hashtable_releaselatched(ht_state_id, &latch);
+                LogDebug(COMPONENT_STATE, "HashTable_Get returned %d", rc);
+                return;
+        }
+
+        state = buffval.addr;
+
+        /* Release a reference under latch */
+        dec_state_t_ref(state);
+
+        /* Release latch */
+        hashtable_releaselatched(ht_state_id, &latch);
+}
+
 /**
  * @brief Get the state from the stateid by entry/owner
  *
