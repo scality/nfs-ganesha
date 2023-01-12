@@ -193,6 +193,8 @@
   nfs4_op_lookup;
   nfs4_op_putfh;
   nfs4_op_rename;
+  nfs4_State_Get_Pointer;
+  nfs4_State_Put_Pointer;
   nfs_config_path;
   nfs_export_get_root_entry;
   nfs_grace_is_member;
