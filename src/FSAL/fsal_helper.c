@@ -363,7 +363,7 @@ static fsal_status_t fsal_check_setattr_perms(struct fsal_obj_handle *obj,
 			    need_write_acl, need_write_data, need_write_attr);
 	}
 
-	if (current->acl) {
+	if (current->acl && current->acl->naces > 0) {
 		status = obj->obj_ops->test_access(obj, access_check, NULL,
 						  NULL, false);
 		note = " (checked ACL)";
