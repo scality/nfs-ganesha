@@ -838,7 +838,7 @@ fsal_status_t fsal_test_access(struct fsal_obj_handle *obj_hdl,
 	}
 
 	if (IS_FSAL_ACE4_REQ(access_type) ||
-	    (attrs.acl != NULL && IS_FSAL_ACE4_MASK_VALID(access_type))) {
+	    (attrs.acl != NULL && attrs.acl->naces > 0 && IS_FSAL_ACE4_MASK_VALID(access_type))) {
 		status = fsal_check_access_acl(&op_ctx->creds,
 					       FSAL_ACE4_MASK(access_type),
 					       allowed, denied, &attrs);
