@@ -1452,6 +1452,30 @@ void server_stats_nfsv4_op_start(int proto_op, struct stats_data *data)
 	}
 }
 
+static bool
+stats_record_is_error(nfsstat4 status)
+{
+  switch(status)
+  {
+    case NFS4_OK:
+    case NFS4ERR_PERM:
+    case NFS4ERR_NOENT:
+    case NFS4ERR_ACCESS:
+    case NFS4ERR_EXIST:
+    case NFS4ERR_NOTDIR:
+    case NFS4ERR_ISDIR:
+    case NFS4ERR_NOSPC:
+    case NFS4ERR_NAMETOOLONG:
+    case NFS4ERR_NOTEMPTY:
+    case NFS4ERR_DQUOT:
+    case NFS4ERR_NOTSUPP:
+    case NFS4ERR_BADSESSION:
+      return false;
+    default:
+      return true;
+  }
+}
+
 /**
  * @brief record NFS V4 compound finished
  *
@@ -1467,7 +1491,7 @@ void server_stats_nfsv4_op_done(int proto_op,
 
 	if(alternate_stats_record) {
 		alternate_stats_record(STATS_TIME_FINISH, NFS_V4,
-				       proto_op, status != NFS4_OK,
+				       proto_op, stats_record_is_error(status),
 				       &op_ctx->op_stat_data);
 	}
 
@@ -1538,7 +1562,8 @@ void server_stats_compound_done(int num_ops, int status)
 
 	if(alternate_stats_record)
 		alternate_stats_record(STATS_COUNT, NFS_V4,
-				       NFSPROC4_COMPOUND, status != NFS4_OK,
+				       NFSPROC4_COMPOUND,
+				       stats_record_is_error(status),
 				       &op_ctx->op_stat_data);
 
 	if (!nfs_param.core_param.enable_NFSSTATS)
