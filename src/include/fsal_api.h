@@ -418,7 +418,7 @@ typedef enum {
 } stats_ops;
 
 
-#define FSAL_STAT_DATA_SIZE 72
+#define FSAL_STAT_DATA_SIZE 80
 struct stats_data {
 	size_t transferred_amount;
 	char fsal_data[FSAL_STAT_DATA_SIZE];
