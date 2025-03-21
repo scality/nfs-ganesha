@@ -1,0 +1,8 @@
+option('rpcbind',
+ type : 'boolean',
+ value : true,
+ description : 'Enable registration with rpcbind')
+option('allocator',
+ type : 'string',
+ value : 'jemalloc',
+ description : 'Specify the memory allocator to use: jemalloc|tcmalloc|libc')
