@@ -1,0 +1,11 @@
+option('rpcbind',
+ type : 'boolean',
+ value : true,
+ description : 'Enable registration with rpcbind')
+option('allocator',
+  type : 'combo',
+  value : 'tcmalloc',
+  choices : ['system', 'jemalloc', 'tcmalloc', 'mimalloc'],
+  description : 'Memory allocator to use',
+  yield : true
+)
