@@ -72,6 +72,21 @@ dl_dep = c_compiler.find_library('dl',
  required : false,
  disabler: true)
 
+if get_option('allocator') == 'system'
+  allocator_dep = []
+else
+  # For tcmalloc, prefer tcmalloc_minimal if available
+  if get_option('allocator') == 'tcmalloc'
+    allocator_dep = c_compiler.find_library('tcmalloc_minimal', required: false)
+    if not allocator_dep.found()
+      allocator_dep = c_compiler.find_library('tcmalloc', required: true)
+    endif
+  else
+    allocator_dep = c_compiler.find_library(get_option('allocator'), required: true)
+  endif
+endif
+
+
 ###
 # Programs
 ###
@@ -574,7 +589,6 @@ fsal_md_cache_lib = static_library('fsal_md_cache', fsal_md_cache_files,
   install : false
 ) # }}}
 
-
 # Build targets
 ganesha_nfsd = executable('ganesha.nfsd',
   'src/MainNFSD/nfs_main.c',
@@ -582,7 +596,7 @@ ganesha_nfsd = executable('ganesha.nfsd',
   c_args : nfs_ganesha_c_args,
   dependencies : [
     dbus_dep, threads_dep, caps_dep, gssapi_krb5_dep, krb5_dep, blkid_dep,
-    nfsidmap_dep, uuid_dep, acl_dep
+    nfsidmap_dep, uuid_dep, acl_dep, allocator_dep
   ],
   link_with : [
     avl_lib,
