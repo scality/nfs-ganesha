@@ -323,6 +323,7 @@ config_parsing_lib = static_library('config_parsing',
 ) # }}}
 # SAL {{{
 sal_files = files( # {{{
+  'src/SAL/sal_metrics.c',
   'src/SAL/state_async.c',
   'src/SAL/state_lock.c',
   'src/SAL/state_share.c',
