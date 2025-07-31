@@ -301,11 +301,26 @@ config_parser_c = custom_target('config_parser_c',
   command : [bison, '-d', '-pganesha_yy', '-o','@OUTPUT@', '@INPUT@'],
   build_by_default : true
 )
+config_parser_lib = static_library('parser_scanner',
+  config_parser_c,
+  include_directories: [nfs_ganesha_inc_dir, 'src/config_parsing', '.'],
+  c_args : nfs_ganesha_c_args,
+  dependencies : main_deps,
+  install : false
+)
 config_scanner_c = custom_target('config_scanner_c',
   input : 'src/config_parsing/conf_lex.l',
   output : 'conf_lex.c',
   command : [flex, '-Pganeshun_yy', '-o', '@OUTPUT@', '@INPUT@'],
   build_by_default : true
+)
+config_scanner_lib = static_library('scanner_scanner',
+  config_scanner_c,
+  include_directories: [nfs_ganesha_inc_dir, 'src/config_parsing', '.'],
+  c_args : nfs_ganesha_c_args,
+  dependencies : main_deps,
+  link_with : [ config_parser_lib ],
+  install : false
 )
 config_parsing_files = files( # {{{
   'src/config_parsing/analyse.c',
@@ -314,11 +329,10 @@ config_parsing_files = files( # {{{
 ) # }}}
 config_parsing_lib = static_library('config_parsing',
   config_parsing_files,
-  config_parser_c,
-  config_scanner_c,
   include_directories: [nfs_ganesha_inc_dir, 'src/config_parsing', '.'],
   c_args : nfs_ganesha_c_args,
   dependencies : main_deps,
+  link_with : [ config_parser_lib, config_scanner_lib ],
   install : false
 ) # }}}
 # SAL {{{
