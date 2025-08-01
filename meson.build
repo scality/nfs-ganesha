@@ -311,6 +311,7 @@ config_parser_lib = static_library('parser_scanner',
 config_scanner_c = custom_target('config_scanner_c',
   input : 'src/config_parsing/conf_lex.l',
   output : 'conf_lex.c',
+  depends: [config_parser_c],
   command : [flex, '-Pganeshun_yy', '-o', '@OUTPUT@', '@INPUT@'],
   build_by_default : true
 )
