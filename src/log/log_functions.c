@@ -1925,6 +1925,18 @@ struct log_component_info LogComponents[] = {
 CT_ASSERT(sizeof(LogComponents) / sizeof(LogComponents[0]) == COMPONENT_COUNT,
 	  "LogComponents must contain all log components");
 
+void systemd_notify(const char *format, ...)
+{
+#ifdef USE_SYSTEMD
+        va_list arguments;
+        va_start(arguments, format);
+
+        sd_notifyf(0, format, arguments);
+
+        va_end(arguments);
+#endif
+}
+
 void DisplayLogComponentLevel(log_components_t component, const char *file,
 			      int line, const char *function,
 			      log_levels_t level, const char *format, ...)
