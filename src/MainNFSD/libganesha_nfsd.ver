@@ -261,6 +261,7 @@
   start_fsals;
   state_err_str;
   strlcpy;
+  systemd_notify;
   subfsal_commit;
   suspend_op_context;
   to_vfs_dirent;

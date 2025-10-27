@@ -64,6 +64,9 @@
 #include "prometheus_exposer.h"
 #endif
 #include "nfs_qos.h"
+#ifdef USE_SYSTEMD
+# include <systemd/sd-daemon.h>
+#endif /* USE_SYSTEMD */
 
 /**
  * @brief Mutex protecting shutdown flag.
@@ -878,6 +881,10 @@ static void do_shutdown(void)
 	bool disorderly = false;
 
 	LogEvent(COMPONENT_MAIN, "NFS EXIT: stopping NFS service");
+
+#ifdef USE_SYSTEMD
+	sd_notify(0, "STATUS=Stopping...\nSTOPPING=1");
+#endif
 
 	gsh_rados_url_shutdown_watch();
 

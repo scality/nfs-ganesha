@@ -85,6 +85,9 @@
 #include "nfs_qos.h"
 #include "nfs_metrics.h"
 #include "sal_metrics.h"
+#ifdef USE_SYSTEMD
+# include <systemd/sd-daemon.h>
+#endif /* USE_SYSTEMD */
 
 pthread_mutexattr_t default_mutex_attr;
 pthread_rwlockattr_t default_rwlock_attr;
@@ -369,6 +372,10 @@ bool reread_config(void)
 	nfs_krb5_parameter_t new_krb5_param;
 #endif
 
+#ifdef USE_SYSTEMD
+        sd_notify(0, "RELOADING=1");
+#endif
+
 	/* If no configuration file is given, then the caller must want to
 	 * reparse the configuration file from startup.
 	 */
@@ -450,6 +457,9 @@ bool reread_config(void)
 	(void)report_config_errors(&err_type, NULL, config_errs_to_log);
 	config_Free(config_struct);
 	LogDebug(COMPONENT_CONFIG, "Config reread successfully");
+#ifdef USE_SYSTEMD
+        sd_notify(0, "READY=1");
+#endif
 	return true;
 
 reread_error:
@@ -1368,6 +1378,10 @@ void nfs_init_complete(void)
 	nfs_init.init_complete = true;
 	PTHREAD_COND_broadcast(&nfs_init.init_cond);
 	PTHREAD_MUTEX_unlock(&nfs_init.init_mutex);
+
+#ifdef USE_SYSTEMD
+	sd_notify(0, "STATUS=Started.\nREADY=1");
+#endif
 }
 
 void nfs_init_wait(void)

@@ -53,6 +53,10 @@
 #include "prometheus_exposer.h"
 #endif /* USE_MONITORING */
 
+#ifdef USE_SYSTEMD
+# include <systemd/sd-daemon.h>
+#endif /* USE_SYSTEMD */
+
 #ifdef LINUX
 #include <sys/prctl.h>
 #ifndef PR_SET_IO_FLUSHER
@@ -212,7 +216,7 @@ int main(int argc, char *argv[])
 	int debug_level = -1;
 	int detach_flag = true;
 	bool dump_trace = false;
-#ifndef HAVE_DAEMON
+#if !defined(HAVE_DAEMON) || defined(USE_SYSTEMD)
 	int dev_null_fd = 0;
 	pid_t son_pid;
 #endif
@@ -394,7 +398,7 @@ int main(int argc, char *argv[])
 
 	/* Start in background, if wanted */
 	if (detach_flag) {
-#ifdef HAVE_DAEMON
+#if defined(HAVE_DAEMON) && !defined(USE_SYSTEMD)
 		/* daemonize the process (fork, close xterm fds,
 		 * detach from parent process) */
 		if (daemon(0, 0))
@@ -468,9 +472,21 @@ int main(int argc, char *argv[])
 			 * it is useless, it must die */
 			LogFullDebug(COMPONENT_MAIN,
 				     "Starting a child of pid %d", son_pid);
+#ifdef USE_SYSTEMD
+			sd_notifyf(0, "MAINPID=%lu\nSTATUS=Starting...", (unsigned long)son_pid);
+			/* Wait for systemd to ACK the message */
+			// needs systemd >= 246
+			// sd_notify_barrier(0, 5000000); // 5-second timeout
+			sleep(1);
+#endif
+
 			exit(0);
 			break;
 		}
+#endif
+	} else {
+#ifdef USE_SYSTEMD
+		sd_notifyf(0, "MAINPID=%lu\nSTATUS=Starting...", (unsigned long)getpid());
 #endif
 	}
 

@@ -328,6 +328,8 @@ option(TIRPC_EPOLL "platform supports EPOLL or emulation" ON)
 # Build configure options
 goption(USE_DBUS "enable DBUS protocol support" ON)
 
+goption(USE_SYSTEMD "enable systemd support" OFF)
+
 # Various DBUS enabled features
 option(USE_CB_SIMULATOR "enable callback simulator thread" OFF)
 
@@ -997,6 +999,25 @@ if(USE_DBUS)
   endif(NOT DBUS_FOUND)
 endif(USE_DBUS)
 
+gopt_test(USE_SYSTEMD)
+if(USE_SYSTEMD)
+  find_package(PkgConfig)
+  # pkg_check_modules doesn't fatal error on REQUIRED, so handle it ourselves
+  pkg_check_modules(SYSTEMD ${USE_SYSTYEMD_REQUIRED} libsystemd)
+  if(NOT SYSTEMD_FOUND)
+    if(USE_SYSTYEMD_REQUIRED)
+      message(FATAL_ERROR "Cannot find SYSTEMD libs but requested on command line")
+    else(USE_SYSTYEMD_REQUIRED)
+      message(WARNING "Cannot find SYSTEMD libs. Disabling SYSTEMD support")
+      set(USE_SYSTEMD OFF)
+    endif(USE_SYSTYEMD_REQUIRED)
+  else(NOT SYSTEMD_FOUND)
+    set(SYSTEM_LIBRARIES ${SYSTEMD_LIBRARIES} ${SYSTEM_LIBRARIES})
+    LIST(APPEND CMAKE_LIBRARY_PATH ${SYSTEMD_LIBRARY_DIRS})
+    link_directories (${SYSTEMD_LIBRARY_DIRS})
+  endif(NOT SYSTEMD_FOUND)
+endif(USE_SYSTEMD)
+
 if(USE_CB_SIMULATOR AND NOT USE_DBUS)
   message(WARNING "The callback simulator needs DBUS.  Disabling callback simulator")
   set(USE_CB_SIMULATOR OFF)
@@ -1421,6 +1442,7 @@ message(STATUS "USE_FSAL_MEM = ${USE_FSAL_MEM}")
 message(STATUS "GSH_CAN_HOST_LOCAL_FS = ${GSH_CAN_HOST_LOCAL_FS}")
 message(STATUS "USE_SYSTEM_NTIRPC = ${USE_SYSTEM_NTIRPC}")
 message(STATUS "USE_DBUS = ${USE_DBUS}")
+message(STATUS "USE_SYSTEMD = ${USE_SYSTEMD}")
 message(STATUS "USE_CB_SIMULATOR = ${USE_CB_SIMULATOR}")
 message(STATUS "USE_BTRFSUTIL = ${USE_BTRFSUTIL}")
 message(STATUS "USE_NFSIDMAP = ${USE_NFSIDMAP}")

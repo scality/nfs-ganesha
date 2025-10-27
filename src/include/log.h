@@ -47,6 +47,10 @@
 #include "display.h"
 #include "log_common.h"
 
+#ifdef USE_SYSTEMD
+# include <systemd/sd-daemon.h>
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -158,6 +162,8 @@ struct log_component_info {
 	const char *comp_str; /* shorter, more useful name */
 };
 
+void systemd_notify(const char *format, ...);
+
 extern log_levels_t *component_log_level;
 extern log_levels_t original_log_level;
 extern log_levels_t default_log_level;
@@ -178,6 +184,7 @@ extern struct log_component_info LogComponents[COMPONENT_COUNT];
 	do {                                                                   \
 		DisplayLogComponentLevel(component, __FILE__, __LINE__,        \
 					 __func__, NIV_FATAL, format, ##args); \
+		systemd_notify("STATUS="format, ##args);                       \
 		abort();                                                       \
 	} while (0)
 
