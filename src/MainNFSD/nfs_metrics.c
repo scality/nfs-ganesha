@@ -192,7 +192,11 @@ static const nfsstat4 index_to_nfsstat4[] = {
 void register_ganesha_info_metrics(const char *server_scope)
 {
 	const metric_label_t labels[] = {
+#if GANESHA_BUILD_RELEASE
+	        METRIC_LABEL("GANESHA_VERSION", GANESHA_VERSION),
+#else
 		METRIC_LABEL("GANESHA_VERSION", _GIT_DESCRIBE),
+#endif
 		METRIC_LABEL("BUILT_TIME", __DATE__ " " __TIME__),
 		METRIC_LABEL("SERVER_SCOPE", server_scope)
 	};

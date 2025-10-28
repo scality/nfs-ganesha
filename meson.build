@@ -1,5 +1,5 @@
 project('nfs-ganesha', 'c', 'cpp',
-  version: '6.3',
+  version: '9.0',
   default_options: [
     'buildtype=debugoptimized',
     'b_ndebug=if-release',
@@ -48,6 +48,9 @@ threads_dep = dependency('threads',
  required : true,
  disabler: true)
 dbus_dep = dependency('dbus-1',
+ required : false,
+ disabler: true)
+systemd_dep = dependency('libsystemd',
  required : false,
  disabler: true)
 urcu_bp_dep = dependency('liburcu-bp',
@@ -130,6 +133,9 @@ endif
 if dbus_dep.found()
   conf.set('USE_DBUS', 1)
 endif
+if systemd_dep.found()
+  conf.set('USE_SYSTEMD', 1)
+endif
 if caps_dep.found()
   conf.set('USE_CAPS', 1)
 endif
@@ -176,12 +182,14 @@ subdir('src/libntirpc')
 nfs_ganesha_inc_dir = [
   'src/include',
   'src/libntirpc/ntirpc',
+  'src/libntirpc/src/monitoring/include',
   'src/include/os/linux',
   'src/monitoring/include',
 ]
 main_deps = [
   bsd_dep,
   dbus_dep,
+  systemd_dep,
   dl_dep,
   threads_dep,
   urcu_bp_dep,
@@ -200,35 +208,15 @@ avl_lib = static_library('avl', avl_files,
   c_args : nfs_ganesha_c_args,
   install : false
 ) # }}}
-# cidr {{{
-cidr_files = files( # {{{
-  'src/cidr/cidr_addr.c',
-  'src/cidr/cidr_compare.c',
-  'src/cidr/cidr_from_str.c',
-  'src/cidr/cidr_get.c',
-  'src/cidr/cidr_inaddr.c',
-  'src/cidr/cidr_mem.c',
-  'src/cidr/cidr_misc.c',
-  'src/cidr/cidr_net.c',
-  'src/cidr/cidr_num.c',
-  'src/cidr/cidr_to_str.c',
-  'src/cidr/cidr_pow2_p.h',
-) # }}}
-# }}}
-cidr_lib = static_library('cidr', cidr_files,
-  include_directories : [nfs_ganesha_inc_dir, 'src/cidr'],
-  dependencies : main_deps,
-  c_args : nfs_ganesha_c_args,
-  install : false
-) # }}}
 # monitoring {{{
 monitoring_files = files( # {{{
-  'src/monitoring/exposer.cc',
-  'src/monitoring/monitoring.cc',
+  'src/monitoring/dynamic_metrics.cc',
+  'src/monitoring/prometheus_exposer.cc',
 ) # }}}
 monitoring_lib = static_library('monitoring', monitoring_files,
   include_directories: [
-    'src/monitoring/prometheus-cpp-lite/core/include',
+    'src/libntirpc/src/monitoring/prometheus-cpp-lite/core/include',
+    'src/libntirpc/src/monitoring/include',
     'src/monitoring/include',
     'src/include',
   ],
@@ -283,6 +271,7 @@ mainnfsd_files = files( # {{{
   'src/support/nfs4_fs_locations.c',
   'src/support/xprt_handler.c',
   'src/support/refstr.c',
+  'src/support/ip_utils.c',
   'src/os/linux/subr.c',
 ) # }}}
 mainnfsd_lib = static_library('mainnfsd', mainnfsd_files,
@@ -291,6 +280,7 @@ mainnfsd_lib = static_library('mainnfsd', mainnfsd_files,
   c_args : nfs_ganesha_c_args,
   link_with : [
     ntirpc_lib,
+    ntirpc_monitoring_lib,
   ],
   install : false
 ) # }}}
@@ -369,6 +359,8 @@ idmap_files = files( # {{{
   'src/idmapper/idmapper_cache.c',
   'src/idmapper/idmapper_negative_cache.c',
   'src/idmapper/idmapper_monitoring.c',
+  'src/idmapper/pwnam_wrappers.c',
+  'src/idmapper/sss_nss_idmap.c',
 ) # }}}
 idmap_lib = static_library('idmap', idmap_files,
   include_directories: [nfs_ganesha_inc_dir, 'src/idmapper'],
@@ -616,7 +608,6 @@ ganesha_nfsd = executable('ganesha.nfsd',
   ],
   link_with : [
     avl_lib,
-    cidr_lib,
     mainnfsd_lib,
     config_parsing_lib,
     sal_lib,
