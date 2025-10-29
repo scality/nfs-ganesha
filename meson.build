@@ -13,7 +13,8 @@ project('nfs-ganesha', 'c', 'cpp',
 # Compiler flags
 ###
 c_compiler = meson.get_compiler('c')
-nfs_ganesha_c_args = c_compiler.get_supported_arguments([
+# Base arguments for nfs-ganesha
+nfs_ganesha_base_args = [
   '-D_LARGEFILE64_SOURCE',
   '-D_FILE_OFFSET_BITS=64',
   '-D_GNU_SOURCE',
@@ -28,8 +29,14 @@ nfs_ganesha_c_args = c_compiler.get_supported_arguments([
   '-Wno-error=pointer-arith',
   '-Wno-error',
   '-Wno-unused-variable',
-  ])
+]
 
+# Override -fvisibility=hidden with -fvisibility=default for release builds
+if get_option('buildtype') == 'release'
+  nfs_ganesha_base_args += ['-fvisibility=default']
+endif
+
+nfs_ganesha_c_args = c_compiler.get_supported_arguments(nfs_ganesha_base_args)
 
 ###
 # Dependencies
@@ -221,6 +228,8 @@ monitoring_lib = static_library('monitoring', monitoring_files,
     'src/include',
   ],
   dependencies : main_deps,
+  link_with : ntirpc_monitoring_lib,
+  c_args : nfs_ganesha_c_args,
   install : false
 ) # }}}
 # MainNFSD {{{
@@ -597,16 +606,17 @@ fsal_md_cache_lib = static_library('fsal_md_cache', fsal_md_cache_files,
   install : false
 ) # }}}
 
-# Build targets
-ganesha_nfsd = executable('ganesha.nfsd',
-  'src/MainNFSD/nfs_main.c',
-  include_directories : nfs_ganesha_inc_dir,
-  c_args : nfs_ganesha_c_args,
-  dependencies : [
-    dbus_dep, threads_dep, caps_dep, gssapi_krb5_dep, krb5_dep, blkid_dep,
-    nfsidmap_dep, uuid_dep, acl_dep, allocator_dep
+
+# libganesha_nfsd shared library {{{
+libganesha_nfsd = shared_library('ganesha_nfsd',
+  [], # no additional files
+  include_directories: nfs_ganesha_inc_dir,
+  dependencies: [
+    dbus_dep, caps_dep, krb5_dep, nfsidmap_dep, acl_dep
   ],
-  link_with : [
+  c_args: nfs_ganesha_c_args,
+  link_args: ['-Wl,--version-script=' + meson.current_source_dir() + '/src/MainNFSD/libganesha_nfsd.ver'],
+  link_whole: [
     avl_lib,
     mainnfsd_lib,
     config_parsing_lib,
@@ -614,7 +624,6 @@ ganesha_nfsd = executable('ganesha.nfsd',
     rpcal_lib,
     idmap_lib,
     dbus_lib,
-    ntirpc_lib,
     nfs_lib,
     xdr_lib,
     rquota_lib,
@@ -624,6 +633,20 @@ ganesha_nfsd = executable('ganesha.nfsd',
     fsal_md_cache_lib,
     monitoring_lib,
   ],
+  version: meson.project_version(),
+  install: true,
+  install_dir: get_option('libdir'),
+) # }}}
+
+# Build targets
+ganesha_nfsd = executable('ganesha.nfsd',
+  'src/MainNFSD/nfs_main.c',
+  include_directories : nfs_ganesha_inc_dir,
+  c_args : nfs_ganesha_c_args,
+  dependencies : [
+    main_deps
+  ],
+  link_with : [libganesha_nfsd, monitoring_lib],
   install : true,
   install_dir : get_option('sbindir'),
   install_tag : 'ganesha_nfsd',
