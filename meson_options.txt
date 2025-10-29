@@ -9,3 +9,8 @@ option('allocator',
   description : 'Memory allocator to use',
   yield : true
 )
+option('monitoring',
+  type : 'feature',
+  value : 'enabled',
+  description : 'Ganesha Monitoring support'
+)
