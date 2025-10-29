@@ -153,7 +153,9 @@ conf.set('_USE_NFS3', 1)
 conf.set('_USE_NLM', 1)
 conf.set('_USE_RQUOTA', 1)
 conf.set('USE_NFSACL3', 1)
-conf.set('USE_MONITORING', 1)
+if get_option('monitoring').enabled()
+  conf.set('USE_MONITORING', 1)
+endif
 conf.set('NFS_GANESHA', 1)
 if get_option('rpcbind')
   conf.set('RPCBIND', 1)
@@ -215,12 +217,14 @@ avl_lib = static_library('avl', avl_files,
   c_args : nfs_ganesha_c_args,
   install : false
 ) # }}}
+
+if get_option('monitoring').enabled()
 # monitoring {{{
 monitoring_files = files( # {{{
   'src/monitoring/dynamic_metrics.cc',
   'src/monitoring/prometheus_exposer.cc',
 ) # }}}
-monitoring_lib = static_library('monitoring', monitoring_files,
+monitoring_lib = shared_library('monitoring', monitoring_files,
   include_directories: [
     'src/libntirpc/src/monitoring/prometheus-cpp-lite/core/include',
     'src/libntirpc/src/monitoring/include',
@@ -232,6 +236,8 @@ monitoring_lib = static_library('monitoring', monitoring_files,
   c_args : nfs_ganesha_c_args,
   install : false
 ) # }}}
+endif # monitoring enabled
+
 # MainNFSD {{{
 mainnfsd_files = files( # {{{
   'src/MainNFSD/nfs_admin_thread.c',
@@ -283,14 +289,17 @@ mainnfsd_files = files( # {{{
   'src/support/ip_utils.c',
   'src/os/linux/subr.c',
 ) # }}}
+
+mainnfsd_link_with = [ntirpc_lib]
+if get_option('monitoring').enabled()
+    mainnfsd_link_with += ntirpc_monitoring_lib
+endif
+
 mainnfsd_lib = static_library('mainnfsd', mainnfsd_files,
   include_directories: [nfs_ganesha_inc_dir, 'src/MainNFSD'],
   dependencies : main_deps,
   c_args : nfs_ganesha_c_args,
-  link_with : [
-    ntirpc_lib,
-    ntirpc_monitoring_lib,
-  ],
+  link_with : mainnfsd_link_with,
   install : false
 ) # }}}
 # config_parsing {{{
@@ -606,6 +615,10 @@ fsal_md_cache_lib = static_library('fsal_md_cache', fsal_md_cache_files,
   install : false
 ) # }}}
 
+libganesha_link_with=[]
+if get_option('monitoring').enabled()
+    libganesha_link_with += monitoring_lib
+endif
 
 # libganesha_nfsd shared library {{{
 libganesha_nfsd = shared_library('ganesha_nfsd',
@@ -616,6 +629,7 @@ libganesha_nfsd = shared_library('ganesha_nfsd',
   ],
   c_args: nfs_ganesha_c_args,
   link_args: ['-Wl,--version-script=' + meson.current_source_dir() + '/src/MainNFSD/libganesha_nfsd.ver'],
+  link_with: libganesha_link_with,
   link_whole: [
     avl_lib,
     mainnfsd_lib,
@@ -631,12 +645,16 @@ libganesha_nfsd = shared_library('ganesha_nfsd',
     nlm_lib,
     fsal_pseudo_lib,
     fsal_md_cache_lib,
-    monitoring_lib,
   ],
   version: meson.project_version(),
   install: true,
   install_dir: get_option('libdir'),
 ) # }}}
+
+ganesha_nfsd_link_with = [libganesha_nfsd]
+if get_option('monitoring').enabled()
+    ganesha_nfsd_link_with += monitoring_lib
+endif
 
 # Build targets
 ganesha_nfsd = executable('ganesha.nfsd',
@@ -646,7 +664,7 @@ ganesha_nfsd = executable('ganesha.nfsd',
   dependencies : [
     main_deps
   ],
-  link_with : [libganesha_nfsd, monitoring_lib],
+  link_with : ganesha_nfsd_link_with,
   install : true,
   install_dir : get_option('sbindir'),
   install_tag : 'ganesha_nfsd',
