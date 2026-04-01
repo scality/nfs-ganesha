@@ -653,7 +653,7 @@ libganesha_nfsd = shared_library('ganesha_nfsd',
 
 ganesha_nfsd_link_with = [libganesha_nfsd]
 if get_option('monitoring').enabled()
-    ganesha_nfsd_link_with += monitoring_lib
+    ganesha_nfsd_link_with += [monitoring_lib, ntirpc_monitoring_lib]
 endif
 
 # Build targets
