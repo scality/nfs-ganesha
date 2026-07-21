@@ -226,6 +226,7 @@ monitoring_files = files( # {{{
 ) # }}}
 monitoring_lib = shared_library('monitoring', monitoring_files,
   include_directories: [
+    'src/libntirpc/ntirpc',
     'src/libntirpc/src/monitoring/prometheus-cpp-lite/core/include',
     'src/libntirpc/src/monitoring/include',
     'src/monitoring/include',
